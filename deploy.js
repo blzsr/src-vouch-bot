@@ -1,24 +1,12 @@
-const { Client, GatewayIntentBits, EmbedBuilder } = require('discord.js');
+const { exec } = require('child_process');
+const { Client, GatewayIntentBits } = require('discord.js');
 const { REST } = require('@discordjs/rest');
 const { Routes } = require('discord-api-types/v9');
 const { SlashCommandBuilder } = require('@discordjs/builders');
 const config = require('./config.json');
-const { exec } = require('child_process');
+const util = require('util');
+const execPromise = util.promisify(exec);
 
-// Function to display a message in a box
-async function displayBox(message, color) {
-    const boxen = (await import('boxen')).default;
-    console.log(
-        boxen(message, {
-            padding: 1,
-            borderStyle: 'round',
-            borderColor: color,
-            backgroundColor: 'black',
-        })
-    );
-}
-
-// Create the client
 const client = new Client({
     intents: [
         GatewayIntentBits.Guilds,
@@ -27,7 +15,6 @@ const client = new Client({
     ],
 });
 
-// Define commands
 const commands = [
     new SlashCommandBuilder()
         .setName('vouch')
@@ -73,39 +60,69 @@ const commands = [
         .setDescription('Display help menu.'),
 ];
 
-// Deploy commands
-const rest = new REST({ version: '9' }).setToken(config.botToken);
-
-(async () => {
+const installDependencies = async () => {
     try {
-        await displayBox('Started refreshing application (/) commands.', 'cyan');
+        console.log('Installing required packages...\n');
 
+        await execPromise('npm install');
+        await execPromise('npm install center-align'); 
+
+        console.log('All packages installed successfully.');
+    } catch (error) {
+        console.error('Error installing packages:', error);
+        process.exit(1);
+    }
+};
+
+const displayCenteredInfo = async () => {
+    console.clear(); 
+
+    const boxen = await import('boxen');
+    const center = require('center-align');
+    const botUser = client.user ? client.user.tag : 'Unknown Bot';
+    const guildCount = client.guilds.cache.size || 0;
+
+    const centeredText = `
+    ${center(`Bot loaded as ${botUser}`, 50)}
+    ${center(`Bot is in ${guildCount} server(s)`, 50)}
+    ${center('Started refreshing application (/) commands.', 50)}
+    ${center('Successfully reloaded application (/) commands.', 50)}
+    `;
+
+    const box = boxen.default(centeredText, {
+        padding: 1,
+        margin: 1,
+        borderStyle: 'double',
+        borderColor: 'green',
+        align: 'center',
+    });
+
+    console.log(box);
+};
+
+const deployCommands = async () => {
+    const rest = new REST({ version: '9' }).setToken(config.botToken);
+
+    try {
+        console.log('Started refreshing application (/) commands.');
         await rest.put(
             Routes.applicationGuildCommands(config.clientId, config.guildId),
             { body: commands },
         );
-
-        await displayBox('Successfully reloaded application (/) commands.', 'green');
-
-        await client.login(config.botToken);
-        const botUser = await client.users.fetch(config.clientId);
-
-        const serverCount = (await client.guilds.fetch()).size;
-
-        await displayBox(`
-Bot Loaded As: ${botUser.username}
-Connected To ${serverCount} Servers
-        `, 'magenta');
-
-        exec('node main.js', (err, stdout, stderr) => {
-            if (err) {
-                console.error(`Error executing main.js: ${err}`);
-                return;
-            }
-            if (stdout) console.log(`Output: ${stdout}`);
-            if (stderr) console.error(`Error: ${stderr}`);
-        });
+        console.log('Successfully reloaded application (/) commands.');
     } catch (error) {
-        await displayBox(`Error: ${error.message}`, 'red');
+        console.error('Error deploying commands or running the bot:', error);
+        process.exit(1);
     }
+};
+
+(async () => {
+    await installDependencies();
+    await deployCommands();
+
+    client.once('ready', async () => {
+        await displayCenteredInfo(); 
+    });
+
+    client.login(config.botToken);
 })();
