@@ -1,11 +1,21 @@
-const { exec } = require('child_process');
-const { Client, GatewayIntentBits } = require('discord.js');
+const { Client, GatewayIntentBits, EmbedBuilder } = require('discord.js');
 const { REST } = require('@discordjs/rest');
 const { Routes } = require('discord-api-types/v9');
 const { SlashCommandBuilder } = require('@discordjs/builders');
 const config = require('./config.json');
-const util = require('util');
-const execPromise = util.promisify(exec);
+const { exec } = require('child_process');
+
+async function displayBox(message, color) {
+    const boxen = (await import('boxen')).default;
+    console.log(
+        boxen(message, {
+            padding: 1,
+            borderStyle: 'round',
+            borderColor: color,
+            backgroundColor: 'black',
+        })
+    );
+}
 
 const client = new Client({
     intents: [
@@ -60,69 +70,38 @@ const commands = [
         .setDescription('Display help menu.'),
 ];
 
-const installDependencies = async () => {
+const rest = new REST({ version: '9' }).setToken(config.botToken);
+
+(async () => {
     try {
-        console.log('Installing required packages...\n');
+        await displayBox('Started refreshing application (/) commands.', 'cyan');
 
-        await execPromise('npm install');
-        await execPromise('npm install center-align'); 
-
-        console.log('All packages installed successfully.');
-    } catch (error) {
-        console.error('Error installing packages:', error);
-        process.exit(1);
-    }
-};
-
-const displayCenteredInfo = async () => {
-    console.clear(); 
-
-    const boxen = await import('boxen');
-    const center = require('center-align');
-    const botUser = client.user ? client.user.tag : 'Unknown Bot';
-    const guildCount = client.guilds.cache.size || 0;
-
-    const centeredText = `
-    ${center(`Bot loaded as ${botUser}`, 50)}
-    ${center(`Bot is in ${guildCount} server(s)`, 50)}
-    ${center('Started refreshing application (/) commands.', 50)}
-    ${center('Successfully reloaded application (/) commands.', 50)}
-    `;
-
-    const box = boxen.default(centeredText, {
-        padding: 1,
-        margin: 1,
-        borderStyle: 'double',
-        borderColor: 'green',
-        align: 'center',
-    });
-
-    console.log(box);
-};
-
-const deployCommands = async () => {
-    const rest = new REST({ version: '9' }).setToken(config.botToken);
-
-    try {
-        console.log('Started refreshing application (/) commands.');
         await rest.put(
             Routes.applicationGuildCommands(config.clientId, config.guildId),
             { body: commands },
         );
-        console.log('Successfully reloaded application (/) commands.');
+
+        await displayBox('Successfully reloaded application (/) commands.', 'green');
+
+        await client.login(config.botToken);
+        const botUser = await client.users.fetch(config.clientId);
+
+        const serverCount = (await client.guilds.fetch()).size;
+
+        await displayBox(`
+Bot Loaded As: ${botUser.username}
+Connected To ${serverCount} Servers
+        `, 'magenta');
+
+        exec('node main.js', (err, stdout, stderr) => {
+            if (err) {
+                console.error(`Error executing main.js: ${err}`);
+                return;
+            }
+            if (stdout) console.log(`Output: ${stdout}`);
+            if (stderr) console.error(`Error: ${stderr}`);
+        });
     } catch (error) {
-        console.error('Error deploying commands or running the bot:', error);
-        process.exit(1);
+        await displayBox(`Error: ${error.message}`, 'red');
     }
-};
-
-(async () => {
-    await installDependencies();
-    await deployCommands();
-
-    client.once('ready', async () => {
-        await displayCenteredInfo(); 
-    });
-
-    client.login(config.botToken);
 })();
