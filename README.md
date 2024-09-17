@@ -14,5 +14,5 @@ node deploy.js
 ```
 
 and watch video 
-
+https://youtu.be/1pDsupUIriA
 :D enjoy
